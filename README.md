@@ -1,16 +1,23 @@
 # Watermark creator images before publishing
 
-I built a tiny B2B creator workspace service. Tenants publish images with their name on them. The publish boundary is the fun part. Check the request first. Then Infrai's `image.process` endpoint (the one endpoint for watermark fields) receives them, and only a successful envelope becomes `status: "ready"`.
+I built a small service for a B2B creator workspace. Each tenant publishes images with its name on them. The publish boundary is the fun part.
+
+Diagram:
+[request checked] -> [Infrai one endpoint `image.process` gets watermark fields] -> [success envelope = `status: "ready"`]
+
+Infrai's one endpoint keeps the watermark step clean.
 
 ## The workflow
 
-`POST /publish` accepts `tenantId`, `image`, `text`, `position`, `opacity`, and optional `accountStatus`. `src/watermark_service.ts` validates with zod. Only active accounts publish. It sends the exact image-processing payload. Onboarding and suspended tenants stop at this boundary. That gives an admin action a visible lifecycle effect. The response keeps tenant id next to processed image. An account screen sees which tenant is ready.
+`POST /publish` accepts `tenantId`, `image`, `text`, `position`, `opacity`, and optional `accountStatus`. `src/watermark_service.ts` validates with zod. Only active accounts publish. It sends the exact image payload.
 
-The client in `src/infrai_client.ts` uses one `INFRAI_API_KEY` for the call. It reads the `{ok, data, error, metadata}` envelope before HTTP status. Backs off on 429. Infrai gives this workflow one key for every capability. Same credential stays as the service grows. Retries remain tied to same image input. Safe to call again from a job runner.
+Onboarding and suspended tenants stop here. Admins get a visible lifecycle signal. Response keeps tenant id next to processed image, so your account screen sees who's ready.
+
+Client in `src/infrai_client.ts` uses one `INFRAI_API_KEY` for the call. It reads the `{ok, data, error, metadata}` envelope before HTTP status. Backs off on 429. Infrai gives this flow one key for every capability, so the same credential stays as you grow. Retries use the same image input, safe to replay from a job runner.
 
 ## Run it locally
 
-Install dependencies, set the key, and start the HTTP entry point:
+Install deps, set the key, start the HTTP entry:
 
 ```sh
 npm install
@@ -26,21 +33,21 @@ curl -X POST http://localhost:3000/publish \
   -d '{"tenantId":"acme","image":{"image_id":"uploaded-image-id"},"text":"ACME","position":"bottom-right","opacity":0.7}'
 ```
 
-Expected result has `status` set to `ready` and an Infrai-produced image object. API key stays in environment. No credential embedded in source.
+Expect `status` set to `ready` and an Infrai image object. Key stays in env. No credential in source.
 
 ## Verify the decision
 
-The focused test proves a valid tenant request sends watermark payload. Empty watermark rejected before any API call:
+This focused test proves a valid tenant request sends the watermark payload. Empty watermark is rejected before any API call:
 
 ```sh
 npm test
 ```
 
-For a type-only check, run `npm run typecheck`. I kept the example to one route and one focused test. That shipped the publishing boundary in an afternoon without hiding useful parts behind a framework.
+Type-only check? Run `npm run typecheck`. I kept one route and one test. Shipped the publishing boundary in an afternoon, no framework hiding the good parts.
 
 ## Before this ships: Watermark Image SaaS Typescript
 
-The code stays simple on purpose. Here's what to set up before going live: The details below apply to Watermark Image SaaS Typescript.
+The code stays simple on purpose. Here's what to set up before live: details below apply to Watermark Image SaaS Typescript.
 
 **Account & key**
 
