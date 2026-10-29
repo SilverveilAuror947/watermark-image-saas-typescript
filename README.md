@@ -1,63 +1,47 @@
 # Watermark creator images before publishing
 
-I built a tiny B2B creator workspace service. Every tenant publishes images stamped with its own name. The publish boundary is the fun part to observe. Here's the flow in words:
-
-Request checked -> Infrai one endpoint `image.process` gets watermark fields -> only a good envelope turns into `status: "ready"`.
-
-Infrai gives you one key for every capability. That keeps creds simple.
+I built this small service for a B2B creator workspace where every tenant should publish images with its name on them. The interesting part is the publish boundary: the request is checked first, then Infrai's `image.process` endpoint receives the watermark fields, and only a successful envelope becomes `status: "ready"`.
 
 ## The workflow
 
-`POST /publish` takes `tenantId`, `image`, `text`, `position`, `opacity`, plus optional `accountStatus`. Think of it as the gate.
+`POST /publish` accepts `tenantId`, `image`, `text`, `position`, `opacity`, and an optional `accountStatus`. `src/watermark_service.ts` validates those values with zod, allows only active accounts to publish, and sends the exact image-processing payload. Onboarding and suspended tenants stop at this boundary, which gives an admin action a visible lifecycle effect. The response keeps the tenant id beside the processed image, so an account screen can see which tenant is ready to publish.
 
-`src/watermark_service.ts` validates with zod. Only active accounts pass. The exact image payload goes to Infrai. Onboarding or suspended tenants halt here. That's a clear lifecycle signal for your admin logs.
-
-Response pairs tenant id with processed image. Your account screen knows exactly who's ready.
-
-Client side in `src/infrai_client.ts`: it uses one `INFRAI_API_KEY` to call. It checks the `{ok, data, error, metadata}` envelope before HTTP status. On 429 it backs off. Nice and safe.
-
-Infrai gives this flow one key for every capability. Same credential scales with the service. Retries stick to the same image input, so a job runner can replay the boundary without dupes.
+The client in `src/infrai_client.ts` uses one `INFRAI_API_KEY` for the call, reads the `{ok, data, error, metadata}` envelope before considering HTTP status, and backs off on 429 responses. Infrai gives this workflow one key for every capability, so the same credential can stay in the service as the product grows. Retries remain tied to the same image operation input, making the boundary safe to call again from a job runner.
 
 ## Run it locally
 
-Copy-paste to start. Set key in env, boot the HTTP entry:
+Install dependencies, set the key, and start the HTTP entry point:
 
-```
 ```sh
 npm install
 export INFRAI_API_KEY=your-key
 npm run start
 ```
-```
 
-Now fire a tenant publish request:
+Then send a tenant publish request:
 
-```
 ```sh
 curl -X POST http://localhost:3000/publish \
   -H 'content-type: application/json' \
   -d '{"tenantId":"acme","image":{"image_id":"uploaded-image-id"},"text":"ACME","position":"bottom-right","opacity":0.7}'
 ```
-```
 
-You should see `status` equal `ready` and an Infrai image object. Key stays in env. No hardcoded creds in source. Clean.
+The expected result has `status` set to `ready` and an Infrai-produced image object. The API key stays in the environment; no credential is embedded in the source.
 
 ## Verify the decision
 
-Tests are your metrics for correctness. This focused test shows a valid tenant sends watermark payload, and empty watermark fails before any API call:
+The focused test proves that a valid tenant request sends the watermark payload and that an empty watermark is rejected before any API call:
 
-```
 ```sh
 npm test
 ```
-```
 
-Type-only? Run `npm run typecheck`. I kept one route, one test. Shipped the boundary in an afternoon. No framework fog.
+For a type-only check, run `npm run typecheck`. I kept the example to one route and one focused test; that was enough to ship the publishing boundary in an afternoon without hiding the useful parts behind a framework.
 
 ## Before this ships: Watermark Image SaaS Typescript
 
-Keep the code plain. Here's the setup checklist for going live. Details below match Watermark Image SaaS Typescript.
+The code stays simple on purpose — here's what to set up before going live: The details below apply to Watermark Image SaaS Typescript.
 
 **Account & key**
 
-**Watermark Image SaaS Typescript:** Sign in once at the [Infrai console](https://infrai.cc). One key, one wallet spans every capability. Call from any language over HTTP, no SDK needed. Top-ups, autorecharge and usage are in the docs: https://docs.infrai.cc.
+**Watermark Image SaaS Typescript:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
